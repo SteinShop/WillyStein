@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imperium Tokens - Trade Like a Caesar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'imperium-cyan': '#00f5ff',
+                        'imperium-red': '#ff0033',
+                        'imperium-dark': '#0a0a1a',
+                        'imperium-darker': '#050510',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Playfair+Display:wght@700&display=swap');
+
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: #050510;
+            color: white;
+            min-height: 100vh;
+        }
+
+        .title-font {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .glow-cyan {
+            text-shadow: 0 0 8px rgba(0, 245, 255, 0.8);
+        }
+
+        .glow-red {
+            text-shadow: 0 0 8px rgba(255, 0, 51, 0.6);
+        }
+
+        .border-glow-cyan {
+            box-shadow: 0 0 12px rgba(0, 245, 255, 0.6);
+        }
+
+        .border-glow-red {
+            box-shadow: 0 0 12px rgba(255, 0, 51, 0.6);
+        }
+
+        .token-card:hover {
+            transform: translateY(-5px);
+            transition: transform 0.3s ease;
+        }
+
+        .holographic-effect {
+            background: linear-gradient(135deg,
+                    rgba(0, 245, 255, 0.1) 0%,
+                    rgba(255, 0, 51, 0.1) 50%,
+                    rgba(0, 245, 255, 0.1) 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .holographic-effect::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(to bottom right,
+                    rgba(0, 245, 255, 0) 0%,
+                    rgba(0, 245, 255, 0.05) 20%,
+                    rgba(255, 0, 51, 0.05) 40%,
+                    rgba(0, 245, 255, 0.05) 60%,
+                    rgba(255, 0, 51, 0.05) 80%,
+                    rgba(0, 245, 255, 0) 100%);
+            transform: rotate(30deg);
+            animation: shine 3s infinite linear;
+        }
+
+        @keyframes shine {
+            from {
+                transform: translateX(-50%) translateY(-50%) rotate(30deg);
+            }
+
+            to {
+                transform: translateX(50%) translateY(50%) rotate(30deg);
+            }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .modal-content {
+            animation: modalFadeIn 0.4s;
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Admin modal styles */
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .admin-table th,
+        .admin-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .admin-table th {
+            background-color: rgba(0, 245, 255, 0.1);
+            color: #00f5ff;
+        }
+
+        .admin-table tr:hover {
+            background-color: rgba(0, 245, 255, 0.05);
+        }
+
+        /* Quantity selector */
+        .quantity-selector {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 10px 0;
+        }
+
+        .quantity-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #00f5ff;
+            color: #050510;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+        }
+
+        .quantity-input {
+            width: 50px;
+            text-align: center;
+            background-color: #050510;
+            color: white;
+            border: 1px solid #00f5ff;
+            border-radius: 5px;
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body class="bg-imperium-dark">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="fixed inset-0 flex items-center justify-center z-50 bg-imperium-darker">
+        <div class="w-full max-w-md p-8 rounded-xl bg-imperium-dark border border-imperium-cyan border-glow-cyan">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold mb-2 title-font glow-cyan">IMPERIUM TOKENS</h1>
+                <p class="text-imperium-cyan">Trade like a Caesar</p>
+            </div>
+
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-imperium-cyan mb-1">Email</label>
+                    <input type="email" id="email" required
+                        class="w-full px-4 py-3 bg-imperium-darker border border-imperium-cyan rounded-lg focus:outline-none focus:border-glow-cyan text-white">
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-imperium-cyan mb-1">Password</label>
+                    <input type="password" id="password" required
+                        class="w-full px-4 py-3 bg-imperium-darker border border-imperium-cyan rounded-lg focus:outline-none focus:border-glow-cyan text-white">
+                </div>
+
+                <div class="flex justify-between items-center">
+                    <div>
+                        <input type="checkbox" id="remember" class="mr-2">
+                        <label for="remember" class="text-sm text-imperium-cyan">Remember me</label>
+                    </div>
+                    <a href="#" class="text-sm text-imperium-red hover:underline">Forgot password?</a>
+                </div>
+
+                <button type="submit"
+                    class="w-full py-3 px-4 bg-gradient-to-r from-imperium-cyan to-imperium-red rounded-lg font-bold hover:opacity-90 transition-all duration-300 glow-cyan">
+                    ENTER THE IMPERIUM
+                </button>
+
+                <p class="text-center text-sm text-gray-400">
+                    Don't have an account?
+                    <a href="#" id="registerLink" class="text-imperium-cyan hover:underline">Register</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Registration Screen (hidden initially) -->
+    <div id="registerScreen" class="fixed inset-0 hidden items-center justify-center z-50 bg-imperium-darker">
+        <div class="w-full max-w-md p-8 rounded-xl bg-imperium-dark border border-imperium-cyan border-glow-cyan">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold mb-2 title-font glow-cyan">JOIN THE IMPERIUM</h1>
+                <p class="text-imperium-cyan">Create your account</p>
+            </div>
+
+            <form id="registerForm" class="space-y-6">
+                <div>
+                    <label for="regEmail" class="block text-sm font-medium text-imperium-cyan mb-1">Email</label>
+                    <input type="email" id="regEmail" required
+                        class="w-full px-4 py-3 bg-imperium-darker border border-imperium-cyan rounded-lg focus:outline-none focus:border-glow-cyan text-white">
+                </div>
+
+                <div>
+                    <label for="regUsername" class="block text-sm font-medium text-imperium-cyan mb-1">Username</label>
+                    <input type="text" id="regUsername" required
+                        class="w-full px-4 py-3 bg-imperium-darker border border-imperium-cyan rounded-lg focus:outline-none focus:border-glow-cyan text-white">
+                </div>
+
+                <div>
+                    <label for="regPassword" class="block text-sm font-medium text-imperium-cyan mb-1">Password</label>
+                    <input type="password" id="regPassword" required
+                        class="w-full px-4 py-3 bg-imperium-darker border border-imperium-cyan rounded-lg focus:outline-none focus:border-glow-cyan text-white">
+                </div>
+
+                <div>
+                    <label for="regConfirmPassword" class="block text-sm font-medium text-imperium-cyan mb-1">Confirm
+                        Password</label>
+                    <input type="password" id="regConfirmPassword" required
+                        class="w-full px-4 py-3 bg-imperium-darker border border-imperium-cyan rounded-lg focus:outline-none focus:border-glow-cyan text-white">
+                </div>
+
+                <button type="submit"
+                    class="w-full py-3 px-4 bg-gradient-to-r from-imperium-cyan to-imperium-red rounded-lg font-bold hover:opacity-90 transition-all duration-300 glow-cyan">
+                    CREATE ACCOUNT
+                </button>
+
+                <p class="text-center text-sm text-gray-400">
+                    Already have an account?
+                    <a href="#" id="loginLink" class="text-imperium-cyan hover:underline">Login</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App (hidden initially) -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <!-- Substitua o header existente por este código: -->
+        <header class="bg-imperium-darker border-b border-imperium-cyan overflow-x-hidden">
+            <div class="container mx-auto px-2 sm:px-4 py-3 flex flex-col sm:flex-row justify-between items-center">
+                <!-- Logo e versão -->
+                <div class="flex items-center mb-2 sm:mb-0">
+                    <h1 class="text-xl sm:text-2xl md:text-3xl font-bold title-font glow-cyan truncate">IMPERIUM TOKENS
+                    </h1>
+                    <span
+                        class="ml-2 px-2 py-0.5 bg-imperium-cyan text-imperium-dark rounded-full text-xs font-bold">BETA</span>
+                </div>
+
+                <!-- Botão WhatsApp (apenas em mobile) -->
+                <div class="sm:hidden w-full mb-2">
+                    <button id="whatsappBtn"
+                        class="w-full py-2 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition">
+                        <i class="fab fa-whatsapp mr-2"></i> TROCAR PONTOS
+                    </button>
+                </div>
+
+                <!-- Controles do usuário -->
+                <div
+                    class="flex items-center space-x-2 sm:space-x-4 w-full sm:w-auto justify-between sm:justify-normal">
+                    <!-- Créditos -->
+                    <div class="text-center min-w-[70px]">
+                        <p class="text-xs text-imperium-cyan truncate">CREDITS</p>
+                        <div class="flex items-center justify-center">
+                            <p id="credits" class="text-lg sm:text-xl md:text-2xl font-bold glow-cyan mr-1 truncate">0
+                            </p>
+                            <button id="getCreditsBtn"
+                                class="px-1 py-0.5 bg-imperium-cyan text-imperium-dark text-xs rounded hover:opacity-90 whitespace-nowrap">
+                                OBTER
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Score -->
+                    <div class="text-center min-w-[60px]">
+                        <p class="text-xs text-imperium-red truncate">SCORE</p>
+                        <p id="score" class="text-lg sm:text-xl md:text-2xl font-bold glow-red truncate">0</p>
+                    </div>
+
+                    <!-- Ícones -->
+                    <div class="flex space-x-2">
+                        <button id="inventoryBtn"
+                            class="relative p-1 sm:p-2 rounded-full border border-imperium-cyan hover:border-glow-cyan">
+                            <i class="fas fa-archive text-sm sm:text-base text-imperium-cyan"></i>
+                            <span id="inventoryCount"
+                                class="absolute -top-1 -right-1 bg-imperium-red text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">0</span>
+                        </button>
+
+                        <button id="logoutBtn"
+                            class="p-1 sm:p-2 rounded-full border border-imperium-red hover:border-glow-red">
+                            <i class="fas fa-sign-out-alt text-sm sm:text-base text-imperium-red"></i>
+                        </button>
+                    </div>
+
+                    <!-- Botão WhatsApp (apenas em desktop) -->
+                    <button id="whatsappBtnDesktop"
+                        class="hidden sm:flex ml-2 px-3 py-1 sm:px-4 sm:py-2 bg-green-500 text-white rounded-lg items-center hover:bg-green-600 transition whitespace-nowrap">
+                        <i class="fab fa-whatsapp mr-1 sm:mr-2"></i>
+                        <span class="text-xs sm:text-sm">TROCAR PONTOS</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-bold title-font glow-cyan">EMPEROR TOKEN MARKET</h2>
+                <div class="flex space-x-4">
+                    <button id="buyTab"
+                        class="px-4 py-2 bg-imperium-cyan text-imperium-dark font-bold rounded-lg border-glow-cyan">BUY</button>
+                    <button id="viewTab"
+                        class="px-4 py-2 bg-imperium-dark text-imperium-cyan font-bold rounded-lg border border-imperium-cyan">VIEW</button>
+                </div>
+            </div>
+
+            <!-- Buy Section -->
+            <div id="buySection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Token cards will be inserted here by JavaScript -->
+            </div>
+
+            <!-- View Section (hidden initially) -->
+            <div id="viewSection" class="hidden">
+                <div class="mb-6">
+                    <h3 class="text-xl font-bold mb-4 glow-cyan">YOUR COLLECTION</h3>
+                    <div id="inventoryItems" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Inventory items will be inserted here by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="inventoryModal" class="modal">
+        <div
+            class="modal-content w-full max-w-4xl bg-imperium-dark border border-imperium-cyan rounded-xl mx-auto mt-20 p-6 border-glow-cyan">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold title-font glow-cyan">YOUR COLLECTION</h3>
+                <button id="closeInventoryModal" class="text-imperium-red text-2xl">&times;</button>
+            </div>
+
+            <div id="modalInventoryItems" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Modal inventory items will be inserted here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Purchase Confirmation Modal -->
+    <div id="purchaseModal" class="modal">
+        <div
+            class="modal-content w-full max-w-md bg-imperium-dark border border-imperium-cyan rounded-xl mx-auto mt-40 p-6 border-glow-cyan">
+            <div class="text-center mb-6">
+                <i class="fas fa-check-circle text-5xl text-imperium-cyan mb-4"></i>
+                <h3 class="text-2xl font-bold title-font glow-cyan">PURCHASE CONFIRMED</h3>
+                <p id="purchaseMessage" class="mt-2 text-imperium-cyan"></p>
+                <p id="scoreAdded" class="mt-1 text-imperium-red font-bold"></p>
+            </div>
+            <button id="closePurchaseModal"
+                class="w-full py-3 px-4 bg-imperium-cyan text-imperium-dark font-bold rounded-lg hover:opacity-90">
+                CONTINUE TRADING
+            </button>
+        </div>
+    </div>
+
+    <!-- Get Credits Modal -->
+    <div id="getCreditsModal" class="modal">
+        <div
+            class="modal-content w-full max-w-md bg-imperium-dark border border-imperium-cyan rounded-xl mx-auto mt-40 p-6 border-glow-cyan">
+            <div class="text-center mb-6">
+                <i class="fas fa-coins text-5xl text-imperium-cyan mb-4"></i>
+                <h3 class="text-2xl font-bold title-font glow-cyan">OBTER CRÉDITOS</h3>
+                <p class="mt-2 text-imperium-cyan">Integração com Efibank em breve!</p>
+                <p class="text-sm text-gray-400 mt-4">Você poderá comprar créditos diretamente aqui</p>
+            </div>
+            <button id="closeGetCreditsModal"
+                class="w-full py-3 px-4 bg-imperium-cyan text-imperium-dark font-bold rounded-lg hover:opacity-90">
+                ENTENDI
+            </button>
+        </div>
+    </div>
+
+    <!-- Admin Modal (hidden initially) -->
+    <div id="adminModal" class="modal">
+        <div
+            class="modal-content w-full max-w-4xl bg-imperium-darker border border-imperium-red rounded-xl mx-auto mt-20 p-6 border-glow-red">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold title-font glow-red">ADMIN PANEL</h3>
+                <button id="closeAdminModal" class="text-imperium-cyan text-2xl">&times;</button>
+            </div>
+
+            <div class="mb-6">
+                <div class="flex space-x-4">
+                    <input type="email" id="adminSearchEmail" placeholder="Search by email"
+                        class="flex-1 px-4 py-2 bg-imperium-dark border border-imperium-cyan rounded-lg text-white">
+                    <button id="adminSearchBtn"
+                        class="px-4 py-2 bg-imperium-cyan text-imperium-dark font-bold rounded-lg">Search</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Username</th>
+                            <th>Score</th>
+                            <th>Credits</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminUsersTable">
+                        <!-- Users will be listed here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button id="closeAdminModalBtn"
+                    class="px-4 py-2 bg-imperium-red text-white font-bold rounded-lg">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+
+</body>
+
+</html>
